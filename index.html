@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Creative Text Editor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="notepad-container">
+    <img src="notepad.svg" id="notepad-svg" alt="Notepad" draggable="false">
+    <textarea
+      id="notebook"
+      spellcheck="false"
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      placeholder="Start writing…"
+    ></textarea>
+    <div id="face-indicator" title="Face tracking active"></div>
+  </div>
+
+  <div id="hint">
+    Tilt head <strong>left / right</strong> to move cursor &nbsp;·&nbsp; <strong>Nod</strong> to change line
+  </div>
+
+  <!-- p5.js for the draw loop & webcam capture -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.11.13/lib/p5.min.js"></script>
+  <!-- ml5.js v1 for FaceMesh -->
+  <script src="https://cdn.jsdelivr.net/npm/ml5@1/dist/ml5.min.js"></script>
+  <script src="sketch.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,134 @@
+/* ── Reset ────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Page ─────────────────────────────────────────────────────── */
+body {
+  background-color: #FBF8F5;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 24px;
+  font-family: 'Caveat', cursive;
+}
+
+/* ── Notepad shell ────────────────────────────────────────────── */
+#notepad-container {
+  position: relative;
+  width: 500px;
+  height: 700px;
+  flex-shrink: 0;
+}
+
+#notepad-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* ── Writing area ─────────────────────────────────────────────── */
+/*
+   SVG coords:  red-margin x=72  first-line y=90  last-line y=650
+   Textarea top is placed so the first text BASELINE sits on y=90.
+   With font-size 20px + line-height 28px the leading is 4px each side,
+   and the Caveat baseline sits ~80 % down the em-box ≈ 16 px from top
+   of the line box.  So textarea-top = 90 - 16 = 74.
+*/
+#notebook {
+  position: absolute;
+  top:    70px;   /* baseline-aligned to first ruled line (y=90) */
+  left:   78px;   /* 6 px right of the red margin line  (x=72)   */
+  width:  408px;  /* to x=486                                     */
+  height: 622px;  /* to y=696 (past last line, room for descenders) */
+
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+
+  font-family: 'Caveat', cursive;
+  font-size: 20px;
+  line-height: 28px;   /* matches SVG ruling interval exactly      */
+  color: #2A2010;
+  letter-spacing: 0.01em;
+
+  padding: 0;
+
+  /* Hide scrollbar but allow overflow so text never clips on entry */
+  overflow-y: scroll;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+#notebook::-webkit-scrollbar {
+  display: none;
+}
+
+#notebook::placeholder {
+  color: #C4B8A2;
+  font-style: italic;
+}
+
+/* ── Face-detection indicator ─────────────────────────────────── */
+#face-indicator {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #CEC0AE;
+  transition: background 0.4s ease, box-shadow 0.4s ease;
+  pointer-events: none;
+}
+
+#face-indicator.active {
+  background: #74C994;
+  box-shadow: 0 0 0 3px rgba(116, 201, 148, 0.28);
+  animation: glow 1.8s ease-in-out infinite;
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(116, 201, 148, 0.28); }
+  50%       { box-shadow: 0 0 0 7px rgba(116, 201, 148, 0.10); }
+}
+
+/* ── Onboarding hint (auto-fades) ─────────────────────────────── */
+#hint {
+  position: fixed;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(42, 32, 16, 0.72);
+  color: #FBF8F5;
+  padding: 9px 22px;
+  border-radius: 24px;
+  font-family: 'Caveat', cursive;
+  font-size: 17px;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: fadeHint 5s ease forwards;
+}
+
+@keyframes fadeHint {
+  0%   { opacity: 0;   transform: translateX(-50%) translateY(6px); }
+  15%  { opacity: 1;   transform: translateX(-50%) translateY(0);   }
+  75%  { opacity: 1;   transform: translateX(-50%) translateY(0);   }
+  100% { opacity: 0;   transform: translateX(-50%) translateY(-4px); }
+}
+
+/* ── Mobile fallback ──────────────────────────────────────────── */
+@media (max-width: 560px) {
+  body {
+    align-items: flex-start;
+    padding: 12px 0;
+    overflow-x: auto;
+  }
+  #hint { display: none; }
+}
