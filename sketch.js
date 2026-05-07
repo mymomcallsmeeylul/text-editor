@@ -8,43 +8,48 @@ const TILT_THRESHOLD  = 0.10;   // radians  — eye-line angle to trigger left/r
 const NOD_THRESHOLD   = 0.13;   // normalised — nose-drop ratio to trigger up/down
 const CURSOR_COOLDOWN = 150;    // ms between successive cursor moves
 const BASELINE_ALPHA  = 0.995;  // exponential smoother for nod baseline (0–1)
-                                 //  higher = slower drift correction
 
 // ── State ────────────────────────────────────────────────────────────────────
 let faceMesh;
 let video;
-let faces            = [];
-let lastCursorMove   = 0;
-let faceDetected     = false;
-let baselineNoseRatio = null;   // slowly-adapting neutral head position
+let faces             = [];
+let lastCursorMove    = 0;
+let faceDetected      = false;
+let baselineNoseRatio = null;
 
 // DOM refs (set in setup)
 let notebook;
 let indicator;
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  preload() — p5 waits for this before running setup(), giving ml5 time to
+//  download the FaceMesh model weights before detection is started.
+// ─────────────────────────────────────────────────────────────────────────────
+function preload() {
+  faceMesh = ml5.faceMesh({ maxFaces: 1, refineLandmarks: false, flipHorizontal: false });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 function setup() {
   noCanvas();
-  frameRate(20);   // 20 fps is plenty; reduces idle CPU
+  frameRate(20);
 
   notebook  = document.getElementById('notebook');
   indicator = document.getElementById('face-indicator');
-
   notebook.focus();
 
-  // Keep textarea focused so setSelectionRange() always works
+  // Re-focus textarea after any click so setSelectionRange() keeps working
   document.addEventListener('click', (e) => {
     if (e.target !== notebook) notebook.focus();
   });
 
-  // Webcam + FaceMesh — graceful degradation if webcam is unavailable
+  // Webcam — graceful degradation if unavailable
   try {
     video = createCapture(VIDEO);
     video.size(320, 240);
-    video.id('webcam-preview');   // CSS positions & styles this; do NOT call hide()
+    video.id('webcam-preview');   // CSS handles position; do NOT call hide()
 
-    // ml5 v1 FaceMesh API
-    faceMesh = ml5.faceMesh({ maxFaces: 1, refineLandmarks: false, flipHorizontal: false });
+    // Pass the p5 video element directly — this is the pattern ml5 v1 expects.
     faceMesh.detectStart(video, (results) => { faces = results; });
   } catch (err) {
     console.warn('Head tilt disabled — webcam unavailable:', err);
@@ -60,34 +65,35 @@ function draw() {
 
   const face = faces[0];
   const kp   = face.keypoints;
-  if (!kp || kp.length < 468) return;
+
+  // Only verify the three specific points we actually use (33, 263, 1).
+  // Checking kp.length === 468 was too strict — ml5 may return 478 (with irises)
+  // or another count, causing this to silently return every frame.
+  if (!kp || !kp[33] || !kp[263] || !kp[1]) return;
 
   setIndicator(true);
 
-  // ── Key MediaPipe FaceMesh landmarks (image coordinates, no flip) ──────────
-  //   33  = right-eye outer corner  (user's right → appears on LEFT of image)
-  //  263  = left-eye  outer corner  (user's left  → appears on RIGHT of image)
+  // ── Key MediaPipe FaceMesh landmarks (image coords, no flip) ──────────────
+  //   33  = right-eye outer corner  (user's right → LEFT side of image)
+  //  263  = left-eye  outer corner  (user's left  → RIGHT side of image)
   //    1  = nose tip
   const rEye    = kp[33];
   const lEye    = kp[263];
   const noseTip = kp[1];
 
-  // Guard: reject if eyes are too close (face too far or badly tracked)
   const eyeWidth = Math.abs(lEye.x - rEye.x);
-  if (eyeWidth < 10) return;
+  if (eyeWidth < 10) return;   // face too far or tracking lost
 
   // ── Head tilt angle ────────────────────────────────────────────────────────
-  //  Without flip: lEye.x > rEye.x
-  //  Tilt LEFT  (left ear down): lEye.y rises, rEye.y drops → angle > 0
-  //  Tilt RIGHT (right ear down): lEye.y drops, rEye.y rises → angle < 0
+  //  lEye.x > rEye.x (left eye is on the right side of the unflipped image).
+  //  Tilt LEFT  (left ear down): lEye.y increases, rEye.y decreases → angle > 0
+  //  Tilt RIGHT (right ear down): lEye.y decreases, rEye.y increases → angle < 0
   const tiltAngle = Math.atan2(lEye.y - rEye.y, lEye.x - rEye.x);
 
   // ── Normalised nod ratio ───────────────────────────────────────────────────
-  //  nose.y relative to eye midpoint, scaled by eye width (distance-invariant)
   const eyeMidY   = (rEye.y + lEye.y) / 2;
   const noseRatio = (noseTip.y - eyeMidY) / eyeWidth;
 
-  // Drift-correcting baseline (adapts very slowly to the user's neutral pose)
   if (baselineNoseRatio === null) {
     baselineNoseRatio = noseRatio;
   } else {
@@ -103,22 +109,20 @@ function draw() {
 
   // ── Left / right tilt → character cursor ──────────────────────────────────
   if (tiltAngle > TILT_THRESHOLD) {
-    moveCursorChar(-1);          // tilt left  → cursor left
+    moveCursorChar(-1);        // tilt left  → cursor left
     lastCursorMove = now;
   } else if (tiltAngle < -TILT_THRESHOLD) {
-    moveCursorChar(1);           // tilt right → cursor right
+    moveCursorChar(1);         // tilt right → cursor right
     lastCursorMove = now;
   }
 
   // ── Nod down / up → line cursor ───────────────────────────────────────────
-  //  After a trigger we nudge the baseline so the user must return to neutral
-  //  before the next trigger fires (prevents runaway scrolling).
   if (nodDelta > NOD_THRESHOLD) {
-    moveCursorLine(1);           // nod down  → next line
+    moveCursorLine(1);         // nod down → next line
     lastCursorMove = now;
     baselineNoseRatio = noseRatio - NOD_THRESHOLD * 0.75;
   } else if (nodDelta < -NOD_THRESHOLD) {
-    moveCursorLine(-1);          // look up   → prev line
+    moveCursorLine(-1);        // look up  → prev line
     lastCursorMove = now;
     baselineNoseRatio = noseRatio + NOD_THRESHOLD * 0.75;
   }
@@ -138,7 +142,6 @@ function moveCursorLine(direction) {
   const pos  = notebook.selectionStart;
   const text = notebook.value;
 
-  // Split at cursor to find current line & column
   const beforeCursor = text.substring(0, pos);
   const linesAbove   = beforeCursor.split('\n');
   const currentLine  = linesAbove.length - 1;
@@ -147,10 +150,9 @@ function moveCursorLine(direction) {
   const allLines   = text.split('\n');
   const targetLine = Math.max(0, Math.min(allLines.length - 1, currentLine + direction));
 
-  // Rebuild character position for target line
   let newPos = 0;
   for (let i = 0; i < targetLine; i++) {
-    newPos += allLines[i].length + 1;   // +1 for the '\n'
+    newPos += allLines[i].length + 1;   // +1 for '\n'
   }
   newPos += Math.min(currentCol, allLines[targetLine].length);
 
