@@ -82,10 +82,21 @@ function draw() {
   const noseTip = kp[1];
 
   const eyeWidth = Math.abs(lEye.x - rEye.x);
-  if (eyeWidth < 10) return;   // face too far or tracking lost
+
+  // Guard: only skip if eyes are literally on top of each other (tracking failure).
+  // The old threshold of 10 assumed pixel coordinates — normalized coords (0–1)
+  // have eyeWidth ≈ 0.15–0.25, which always triggered the early return.
+  if (eyeWidth < 0.001) return;
+
+  // Debug: log coordinate scale + tilt angle once per second so you can
+  // verify detection is running.  Remove once confirmed working.
+  if (frameCount % 20 === 0) {
+    const tiltDbg = Math.atan2(lEye.y - rEye.y, lEye.x - rEye.x);
+    console.log(`[tilt] eyeW=${eyeWidth.toFixed(3)}  angle=${tiltDbg.toFixed(3)}  threshold=±${TILT_THRESHOLD}`);
+  }
 
   // ── Head tilt angle ────────────────────────────────────────────────────────
-  //  lEye.x > rEye.x (left eye is on the right side of the unflipped image).
+  //  atan2 is scale-independent, so it works for both pixel and normalised coords.
   //  Tilt LEFT  (left ear down): lEye.y increases, rEye.y decreases → angle > 0
   //  Tilt RIGHT (right ear down): lEye.y decreases, rEye.y increases → angle < 0
   const tiltAngle = Math.atan2(lEye.y - rEye.y, lEye.x - rEye.x);
@@ -133,6 +144,7 @@ function draw() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function moveCursorChar(delta) {
+  notebook.focus();
   const pos    = notebook.selectionStart;
   const newPos = Math.max(0, Math.min(notebook.value.length, pos + delta));
   notebook.setSelectionRange(newPos, newPos);
