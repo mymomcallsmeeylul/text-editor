@@ -41,7 +41,7 @@ function setup() {
   try {
     video = createCapture(VIDEO);
     video.size(320, 240);
-    video.hide();
+    video.id('webcam-preview');   // CSS positions & styles this; do NOT call hide()
 
     // ml5 v1 FaceMesh API
     faceMesh = ml5.faceMesh({ maxFaces: 1, refineLandmarks: false, flipHorizontal: false });
