@@ -4,9 +4,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Tunable constants ────────────────────────────────────────────────────────
-const TILT_THRESHOLD  = 0.18;   // radians  — eye-line angle to trigger left/right
+const TILT_THRESHOLD  = 0.35;   // radians (~20°) — eye-line angle to trigger left/right
 const NOD_THRESHOLD   = 0.20;   // normalised — nose-drop ratio to trigger up/down
-const CURSOR_COOLDOWN = 220;    // ms between successive cursor moves
+const CURSOR_COOLDOWN = 350;    // ms between successive cursor moves
 const BASELINE_ALPHA  = 0.995;  // exponential smoother for nod baseline (0–1)
 
 // ── State ────────────────────────────────────────────────────────────────────
