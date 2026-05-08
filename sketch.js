@@ -273,19 +273,17 @@ function isPencilGrip(hand) {
   const kp = hand.keypoints;
   if (!kp || kp.length < 21) return false;
 
-  const isNorm = kp[8].x <= 1.0 && kp[8].y <= 1.0;
-  const vw     = video ? (video.elt.videoWidth  || 640) : 640;
-  const vh     = video ? (video.elt.videoHeight || 480) : 480;
-  const toVP   = p => isNorm
-    ? { x: p.x * windowWidth,      y: p.y * windowHeight }
-    : { x: p.x * windowWidth / vw, y: p.y * windowHeight / vh };
+  // Curl = tip y is greater than middle joint y by at least 10 units
+  // Works in both normalised (0-1) and pixel coordinate spaces because
+  // we only compare y values within the same hand, same frame.
+  const dIndex  = kp[8].y  - kp[7].y;   // index  tip vs middle joint
+  const dMiddle = kp[12].y - kp[11].y;  // middle tip vs middle joint
+  const dRing   = kp[16].y - kp[15].y;  // ring   tip vs middle joint
+  const dPinky  = kp[20].y - kp[19].y;  // pinky  tip vs middle joint
 
-  const p4  = toVP(kp[4]);
-  const p8  = toVP(kp[8]);
-  const p12 = toVP(kp[12]);
+  console.log(`[pencil] index=${dIndex.toFixed(3)} middle=${dMiddle.toFixed(3)} ring=${dRing.toFixed(3)} pinky=${dPinky.toFixed(3)}`);
 
-  return dist(p4.x, p4.y, p8.x,  p8.y)  < 40 &&
-         dist(p4.x, p4.y, p12.x, p12.y) < 40;
+  return dIndex > 10 && dMiddle > 10 && dRing > 10 && dPinky > 10;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
