@@ -253,20 +253,17 @@ function isTwoFingerGesture(hand) {
   const kp = hand.keypoints;
   if (!kp || kp.length < 21) return false;
 
-  // Detect coordinate space: ml5 v1 may return 0-1 or video-pixel values
-  const isNorm = kp[8].x <= 1.0 && kp[8].y <= 1.0;
-  const thresh = isNorm ? 0.05 : 15;
+  const isNorm  = kp[8].x <= 1.0 && kp[8].y <= 1.0;
+  const thresh  = isNorm ? 0.05 : 15;
 
-  const isExtended = (tip, base) => (kp[base].y - kp[tip].y) >  thresh;
-  const isClosed   = (tip, base) => (kp[base].y - kp[tip].y) <= thresh;
+  const indexUp  = (kp[5].y  - kp[8].y)  > thresh;
+  const middleUp = (kp[9].y  - kp[12].y) > thresh;
 
-  return (
-    isExtended(8,  5)  &&   // index extended
-    isExtended(12, 9)  &&   // middle extended
-    isClosed(4,  1)    &&   // thumb closed
-    isClosed(16, 13)   &&   // ring closed
-    isClosed(20, 17)        // pinky closed
-  );
+  if (frameCount % 20 === 0) {
+    console.log(`[strike] indexUp=${indexUp} (${(kp[5].y - kp[8].y).toFixed(3)}) middleUp=${middleUp} (${(kp[9].y - kp[12].y).toFixed(3)}) thresh=${thresh}`);
+  }
+
+  return indexUp && middleUp;
 }
 
 function isPencilGrip(hand) {
@@ -281,7 +278,9 @@ function isPencilGrip(hand) {
   const dRing   = kp[16].y - kp[15].y;  // ring   tip vs middle joint
   const dPinky  = kp[20].y - kp[19].y;  // pinky  tip vs middle joint
 
-  console.log(`[pencil] index=${dIndex.toFixed(3)} middle=${dMiddle.toFixed(3)} ring=${dRing.toFixed(3)} pinky=${dPinky.toFixed(3)}`);
+  if (frameCount % 20 === 0) {
+    console.log(`[pencil] index=${dIndex.toFixed(3)} middle=${dMiddle.toFixed(3)} ring=${dRing.toFixed(3)} pinky=${dPinky.toFixed(3)}`);
+  }
 
   return dIndex > 10 && dMiddle > 10 && dRing > 10 && dPinky > 10;
 }
