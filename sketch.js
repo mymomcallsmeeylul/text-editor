@@ -179,10 +179,10 @@ function draw() {
       if (prevCursorX !== null) {
         const dx = cx - prevCursorX;
         const dy = cy - prevCursorY;
-        if (Math.abs(dx) > 18 && Math.abs(dy) < 18) {
-          // Interpolate 8 steps so fast swipes catch every word swept over
-          for (let i = 0; i <= 8; i++) {
-            const t = i / 8;
+        if (Math.abs(dx) > 10 && Math.abs(dy) < 50) {
+          // Interpolate 16 steps so fast swipes catch every word swept over
+          for (let i = 0; i <= 16; i++) {
+            const t = i / 16;
             const w = getWordAtPoint(prevCursorX + dx * t, prevCursorY + dy * t);
             if (w) struckWords.add(w.index);
           }
@@ -240,9 +240,9 @@ function getWordAtPoint(px, py) {
   const el  = els.find(e => e.tagName === 'SPAN' && e.dataset.index !== undefined);
   if (!el) return null;
 
-  // Vertical bounds check: reject points that are above/below this span's line (±4 px)
+  // Vertical bounds check: reject points clearly outside this span's line
   const rect = el.getBoundingClientRect();
-  if (py < rect.top - 4 || py > rect.bottom + 4) return null;
+  if (py < rect.top - 12 || py > rect.bottom + 12) return null;
 
   return { index: parseInt(el.dataset.index), el, text: el.textContent, rect };
 }
@@ -278,6 +278,7 @@ function syncMirror() {
       const span = document.createElement('span');
       span.dataset.index = wordIndex++;
       span.textContent   = token;
+      span.style.pointerEvents = 'auto';
       mirror.appendChild(span);
     }
   }

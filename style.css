@@ -10,22 +10,18 @@ body {
   background-color: #FBF8F5;
   display: flex;
   justify-content: center;
-  align-items: flex-start;   /* don't clip tall A4 on short viewports */
+  align-items: center;
   min-height: 100vh;
-  padding: 32px 24px;
+  padding: 0;
   font-family: 'Caveat', cursive;
 }
 
 /* ── Notepad shell ────────────────────────────────────────────── */
-/*
-   Figma SVG: 595 × 842 (A4)
-   Binding circles: cx=44 r=12  →  right edge at x=56
-   "Notes" header path: y ≈ 50–97
-*/
+/* 595×842 scaled to 70%: 417×589 */
 #notepad-container {
   position: relative;
-  width: 595px;
-  height: 842px;
+  width: 417px;
+  height: 589px;
   flex-shrink: 0;
 }
 
@@ -37,19 +33,13 @@ body {
   pointer-events: none;
 }
 
-/* ── Writing area ─────────────────────────────────────────────── */
-/*
-   left:   82 px  (26 px clear of the binding circles' right edge at x=56)
-   top:   112 px  (15 px below the "Notes" header which ends at y≈97)
-   width:  493 px (to x=575, leaving a 20 px right margin)
-   height: 710 px (to y=822, leaving a 20 px bottom margin)
-*/
+/* ── Writing area (70% of original pixel values) ─────────────── */
 #notebook {
   position: absolute;
-  top:    112px;
-  left:   82px;
-  width:  493px;
-  height: 710px;
+  top:    78px;
+  left:   57px;
+  width:  345px;
+  height: 497px;
 
   background: transparent;
   border: none;
@@ -57,14 +47,13 @@ body {
   resize: none;
 
   font-family: 'EB Garamond', Garamond, serif;
-  font-size: 22px;
+  font-size: 16px;
   line-height: 2em;
   color: #2A1E0E;
   letter-spacing: 0.01em;
 
   padding: 0;
 
-  /* Hide scrollbar — text scrolls silently beyond the page edge */
   overflow-y: scroll;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -83,13 +72,13 @@ body {
 /* ── Mirror overlay (word hit-detection) ─────────────────────── */
 #mirror {
   position: absolute;
-  top:    112px;
-  left:   82px;
-  width:  493px;
-  height: 710px;
+  top:    78px;
+  left:   57px;
+  width:  345px;
+  height: 497px;
 
   font-family: 'EB Garamond', Garamond, serif;
-  font-size: 22px;
+  font-size: 16px;
   line-height: 2em;
   letter-spacing: 0.01em;
   color: transparent;
