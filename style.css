@@ -58,7 +58,7 @@ body {
 
   font-family: 'EB Garamond', Garamond, serif;
   font-size: 22px;
-  line-height: 36px;
+  line-height: 2em;
   color: #2A1E0E;
   letter-spacing: 0.01em;
 
@@ -75,8 +75,42 @@ body {
 }
 
 #notebook::placeholder {
+  font-family: 'EB Garamond', Garamond, serif;
   color: #C4B8A2;
   font-style: italic;
+}
+
+/* ── Mirror overlay (word hit-detection) ─────────────────────── */
+#mirror {
+  position: absolute;
+  top:    112px;
+  left:   82px;
+  width:  493px;
+  height: 710px;
+
+  font-family: 'EB Garamond', Garamond, serif;
+  font-size: 22px;
+  line-height: 2em;
+  letter-spacing: 0.01em;
+  color: transparent;
+  background: transparent;
+
+  pointer-events: none;
+  user-select: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  overflow-y: scroll;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  padding: 0;
+  margin: 0;
+  border: none;
+  z-index: 5;
+}
+
+#mirror::-webkit-scrollbar {
+  display: none;
 }
 
 /* ── Face-detection indicator ─────────────────────────────────── */
