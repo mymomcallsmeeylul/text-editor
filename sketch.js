@@ -270,19 +270,20 @@ function isPencilGrip(hand) {
   const kp = hand.keypoints;
   if (!kp || kp.length < 21) return false;
 
-  // Curl = tip y is greater than middle joint y by at least 10 units
-  // Works in both normalised (0-1) and pixel coordinate spaces because
-  // we only compare y values within the same hand, same frame.
-  const dIndex  = kp[8].y  - kp[7].y;   // index  tip vs middle joint
-  const dMiddle = kp[12].y - kp[11].y;  // middle tip vs middle joint
-  const dRing   = kp[16].y - kp[15].y;  // ring   tip vs middle joint
-  const dPinky  = kp[20].y - kp[19].y;  // pinky  tip vs middle joint
+  // Reuse the same extension check as isTwoFingerGesture so the two gestures
+  // are provably mutually exclusive:
+  //   strikethrough = indexUp && middleUp
+  //   pen           = indexUp && !middleUp
+  const isNorm   = kp[8].x <= 1.0 && kp[8].y <= 1.0;
+  const thresh   = isNorm ? 0.05 : 15;
+  const indexUp  = (kp[5].y - kp[8].y)  > thresh;
+  const middleUp = (kp[9].y - kp[12].y) > thresh;
 
   if (frameCount % 20 === 0) {
-    console.log(`[pencil] index=${dIndex.toFixed(3)} middle=${dMiddle.toFixed(3)} ring=${dRing.toFixed(3)} pinky=${dPinky.toFixed(3)}`);
+    console.log(`[pencil] indexUp=${indexUp} (${(kp[5].y - kp[8].y).toFixed(3)})  middleUp=${middleUp} (${(kp[9].y - kp[12].y).toFixed(3)})  thresh=${thresh}`);
   }
 
-  return dIndex > 10 && dMiddle > 10 && dRing > 10 && dPinky > 10;
+  return indexUp && !middleUp;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
