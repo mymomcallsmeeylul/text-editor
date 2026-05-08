@@ -33,6 +33,10 @@ let wasPencilGrip = false;
 let penGraceFrm   = 0;         // consecutive frames since fist was last seen
 let strikeGraceFrm = 0;        // consecutive frames since strike gesture was last seen
 
+// ── Eraser state ──────────────────────────────────────────────────────────────
+let palmActive = false;
+let palmX = 0, palmY = 0;
+
 // ── Mirror state ──────────────────────────────────────────────────────────────
 let lastMirrorText = null;
 
@@ -171,19 +175,40 @@ function draw() {
       const cx = isNorm ? rawX * windowWidth  : rawX * windowWidth  / vw;
       const cy = isNorm ? rawY * windowHeight : rawY * windowHeight / vh;
 
-      const onPad     = isOverNotepad(cx, cy);
-      const seeStrike = isTwoFingerGesture(hand) && onPad;
-      const seePencil = isPencilGrip(hand) && !onPad;
+      const onPad       = isOverNotepad(cx, cy);
+      const seeOpenPalm = isOpenPalm(hand);
+      // Lower-priority gestures only evaluated when palm is not active
+      const seeStrike   = !seeOpenPalm && isTwoFingerGesture(hand) && onPad;
+      const seePencil   = !seeOpenPalm && isPencilGrip(hand) && !onPad;
 
-      if (seeStrike) {
-        // ── Strikethrough: inside notepad ────────────────────────────
+      if (seeOpenPalm) {
+        // ── Eraser: full canvas, highest priority ─────────────────────
+        palmActive     = true;
         strikeGraceFrm = 0;
-        // Close any open pen stroke on tool switch
+        prevCursorX    = null;
+        prevCursorY    = null;
         if (wasPencilGrip) {
           if (currentStroke.length > 1) inkStrokes.push([...currentStroke]);
           currentStroke = [];
           wasPencilGrip = false;
-          penGraceFrm = 0;
+          penGraceFrm   = 0;
+        }
+        // Palm cursor anchored at wrist (kp0)
+        const kp0 = hand.keypoints[0];
+        palmX = isNorm ? kp0.x * windowWidth  : kp0.x * windowWidth  / vw;
+        palmY = isNorm ? kp0.y * windowHeight : kp0.y * windowHeight / vh;
+        // Permanently remove data under the eraser circle
+        eraseAtPoint(palmX, palmY, 30);
+
+      } else if (seeStrike) {
+        // ── Strikethrough: inside notepad ────────────────────────────
+        palmActive     = false;
+        strikeGraceFrm = 0;
+        if (wasPencilGrip) {
+          if (currentStroke.length > 1) inkStrokes.push([...currentStroke]);
+          currentStroke = [];
+          wasPencilGrip = false;
+          penGraceFrm   = 0;
         }
 
         noStroke();
@@ -216,6 +241,7 @@ function draw() {
 
       } else if (seePencil) {
         // ── Pen drawing: outside notepad ─────────────────────────────
+        palmActive  = false;
         penGraceFrm = 0;
         prevCursorX = null;
         prevCursorY = null;
@@ -227,11 +253,9 @@ function draw() {
         wasPencilGrip = true;
 
       } else {
-        // No active gesture — run grace-period counters so brief dropouts
-        // don't chop strokes or reset swipe tracking mid-action
+        // No active gesture — run grace-period counters
+        palmActive = false;
 
-        // Strike grace: keep prevCursorX/Y alive so a flicker during a swipe
-        // doesn't zero-out the delta and miss the word hit
         if (prevCursorX !== null) {
           strikeGraceFrm++;
           if (strikeGraceFrm >= STRIKE_GRACE) {
@@ -241,8 +265,6 @@ function draw() {
           }
         }
 
-        // Pen grace: keep currentStroke open so a brief fist dropout
-        // doesn't split a continuous drawing into two disconnected segments
         if (wasPencilGrip) {
           penGraceFrm++;
           if (penGraceFrm >= PEN_GRACE) {
@@ -255,7 +277,8 @@ function draw() {
       }
 
     } else {
-      // Keypoints unavailable — hard reset, no grace
+      // Keypoints unavailable — hard reset
+      palmActive  = false;
       prevCursorX = null;
       prevCursorY = null;
       if (wasPencilGrip) {
@@ -266,7 +289,8 @@ function draw() {
       }
     }
   } else {
-    // No hand detected — hard reset, no grace
+    // No hand detected — hard reset
+    palmActive  = false;
     prevCursorX = null;
     prevCursorY = null;
     if (wasPencilGrip) {
@@ -277,9 +301,10 @@ function draw() {
     }
   }
 
-  // Ink beneath strike lines; both redrawn from stored data each frame
+  // Ink beneath strike lines; eraser cursor on top of everything
   drawInkStrokes();
   drawStrikes();
+  drawEraserCursor();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -289,6 +314,20 @@ function draw() {
 function isOverNotepad(x, y) {
   const r = document.getElementById('notebook').getBoundingClientRect();
   return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+}
+
+function isOpenPalm(hand) {
+  const kp = hand.keypoints;
+  if (!kp || kp.length < 21) return false;
+  const isNorm = kp[8].x <= 1.0 && kp[8].y <= 1.0;
+  const thresh = isNorm ? 0.05 : 15;
+  return (
+    kp[4].y  < kp[2].y  - thresh &&   // thumb
+    kp[8].y  < kp[5].y  - thresh &&   // index
+    kp[12].y < kp[9].y  - thresh &&   // middle
+    kp[16].y < kp[13].y - thresh &&   // ring
+    kp[20].y < kp[17].y - thresh      // pinky
+  );
 }
 
 function isTwoFingerGesture(hand) {
@@ -336,7 +375,7 @@ function isPencilGrip(hand) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Ink rendering — redrawn from stored arrays every frame
+//  Ink rendering + eraser — redrawn from stored arrays every frame
 // ─────────────────────────────────────────────────────────────────────────────
 
 function drawInkStrokes() {
@@ -362,6 +401,44 @@ function drawCurveStroke(pts) {
   for (const p of pts) curveVertex(p.x, p.y);
   curveVertex(pts[pts.length - 1].x, pts[pts.length - 1].y);
   endShape();
+}
+
+function eraseAtPoint(px, py, r) {
+  const r2 = r * r;
+  // Remove ink stroke points inside the eraser circle
+  for (let i = inkStrokes.length - 1; i >= 0; i--) {
+    inkStrokes[i] = inkStrokes[i].filter(p => (p.x - px) ** 2 + (p.y - py) ** 2 > r2);
+    if (inkStrokes[i].length < 2) inkStrokes.splice(i, 1);
+  }
+  currentStroke = currentStroke.filter(p => (p.x - px) ** 2 + (p.y - py) ** 2 > r2);
+
+  // Remove struck words whose visual midline intersects the eraser circle
+  if (struckWords.size > 0 && mirror) {
+    const spans = mirror.querySelectorAll('span[data-index]');
+    for (const span of spans) {
+      const idx = parseInt(span.dataset.index);
+      if (!struckWords.has(idx)) continue;
+      const rect = span.getBoundingClientRect();
+      const mx   = (rect.left + rect.right) / 2;
+      const my   = rect.top + rect.height * 0.55;
+      if ((mx - px) ** 2 + (my - py) ** 2 <= r2) struckWords.delete(idx);
+    }
+  }
+}
+
+function drawEraserCursor() {
+  if (!palmActive) return;
+  // Composite-erase the pixels already drawn by drawInkStrokes / drawStrikes
+  erase();
+  noStroke();
+  fill(255);
+  circle(palmX, palmY, 60);
+  noErase();
+  // Visible ring so the user can see the eraser boundary
+  noFill();
+  stroke(0, 0, 0);
+  strokeWeight(2);
+  circle(palmX, palmY, 60);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
