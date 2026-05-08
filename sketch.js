@@ -169,7 +169,9 @@ function draw() {
       // Shared cursor position (midpoint of index + middle tips)
       const rawX   = (kp8.x + kp12.x) / 2;
       const rawY   = (kp8.y + kp12.y) / 2;
-      const isNorm = rawX <= 1.0 && rawY <= 1.0;
+      // Pixel-space coords are 0-320+; normalized are 0-1 (but can slightly
+      // exceed 1.0 at frame edges). Threshold of 2.0 safely separates them.
+      const isNorm = rawX < 2.0 && rawY < 2.0;
       const vw     = video.elt.videoWidth  || 640;
       const vh     = video.elt.videoHeight || 480;
       const cx = isNorm ? rawX * windowWidth  : rawX * windowWidth  / vw;
@@ -319,8 +321,8 @@ function isOverNotepad(x, y) {
 function isOpenPalm(hand) {
   const kp = hand.keypoints;
   if (!kp || kp.length < 21) return false;
-  const isNorm = kp[8].x <= 1.0 && kp[8].y <= 1.0;
-  const thresh = isNorm ? 0.05 : 15;
+  const isNorm = kp[0].x < 2.0;
+  const thresh = isNorm ? 0.03 : 8;
   return (
     kp[4].y  < kp[2].y  - thresh &&   // thumb
     kp[8].y  < kp[5].y  - thresh &&   // index
@@ -334,8 +336,9 @@ function isTwoFingerGesture(hand) {
   const kp = hand.keypoints;
   if (!kp || kp.length < 21) return false;
 
-  const isNorm  = kp[8].x <= 1.0 && kp[8].y <= 1.0;
-  const thresh  = isNorm ? 0.05 : 15;
+  // Anchor on wrist (kp0) — far from frame edges, more stable than fingertips
+  const isNorm = kp[0].x < 2.0;
+  const thresh = isNorm ? 0.03 : 8;
 
   const indexUp  = (kp[5].y  - kp[8].y)  > thresh;
   const middleUp = (kp[9].y  - kp[12].y) > thresh;
@@ -355,8 +358,8 @@ function isPencilGrip(hand) {
   const kp = hand.keypoints;
   if (!kp || kp.length < 21) return false;
 
-  // Convert keypoints to viewport pixels so the threshold is literally in px
-  const isNorm = kp[8].x <= 1.0 && kp[8].y <= 1.0;
+  // Anchor on wrist (kp0) for stable isNorm — fingertips drift past 1.0 at edges
+  const isNorm = kp[0].x < 2.0;
   const vw     = video ? (video.elt.videoWidth  || 640) : 640;
   const vh     = video ? (video.elt.videoHeight || 480) : 480;
   const toVP   = p => isNorm
@@ -370,8 +373,10 @@ function isPencilGrip(hand) {
 
   console.log(`[pencil] index=${dIndex.toFixed(1)} middle=${dMiddle.toFixed(1)} ring=${dRing.toFixed(1)} pinky=${dPinky.toFixed(1)}`);
 
-  const THRESH = 60;
-  return dIndex < THRESH && dMiddle < THRESH && dRing < THRESH && dPinky < THRESH;
+  // 80px threshold; tolerate one finger not fully curled (3-of-4 majority)
+  const THRESH  = 80;
+  const nClosed = [dIndex, dMiddle, dRing, dPinky].filter(d => d < THRESH).length;
+  return nClosed >= 3;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
