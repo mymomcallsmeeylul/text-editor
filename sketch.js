@@ -266,24 +266,31 @@ function isTwoFingerGesture(hand) {
   return indexUp && middleUp;
 }
 
+function dist2D(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
 function isPencilGrip(hand) {
   const kp = hand.keypoints;
   if (!kp || kp.length < 21) return false;
 
-  // Reuse the same extension check as isTwoFingerGesture so the two gestures
-  // are provably mutually exclusive:
-  //   strikethrough = indexUp && middleUp
-  //   pen           = indexUp && !middleUp
-  const isNorm   = kp[8].x <= 1.0 && kp[8].y <= 1.0;
-  const thresh   = isNorm ? 0.05 : 15;
-  const indexUp  = (kp[5].y - kp[8].y)  > thresh;
-  const middleUp = (kp[9].y - kp[12].y) > thresh;
+  // Convert keypoints to viewport pixels so the threshold is literally in px
+  const isNorm = kp[8].x <= 1.0 && kp[8].y <= 1.0;
+  const vw     = video ? (video.elt.videoWidth  || 640) : 640;
+  const vh     = video ? (video.elt.videoHeight || 480) : 480;
+  const toVP   = p => isNorm
+    ? { x: p.x * windowWidth,      y: p.y * windowHeight }
+    : { x: p.x * windowWidth / vw, y: p.y * windowHeight / vh };
 
-  if (frameCount % 20 === 0) {
-    console.log(`[pencil] indexUp=${indexUp} (${(kp[5].y - kp[8].y).toFixed(3)})  middleUp=${middleUp} (${(kp[9].y - kp[12].y).toFixed(3)})  thresh=${thresh}`);
-  }
+  const dIndex  = dist2D(toVP(kp[8]),  toVP(kp[5]));
+  const dMiddle = dist2D(toVP(kp[12]), toVP(kp[9]));
+  const dRing   = dist2D(toVP(kp[16]), toVP(kp[13]));
+  const dPinky  = dist2D(toVP(kp[20]), toVP(kp[17]));
 
-  return indexUp && !middleUp;
+  console.log(`[pencil] index=${dIndex.toFixed(1)} middle=${dMiddle.toFixed(1)} ring=${dRing.toFixed(1)} pinky=${dPinky.toFixed(1)}`);
+
+  const THRESH = 60;
+  return dIndex < THRESH && dMiddle < THRESH && dRing < THRESH && dPinky < THRESH;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
