@@ -24,6 +24,11 @@ let prevCursorX = null;
 let prevCursorY = null;
 let struckWords = new Set();   // word-span indices that have been struck
 
+// ── Pen drawing state ─────────────────────────────────────────────────────────
+let inkStrokes    = [];        // completed strokes, each is an array of {x, y}
+let currentStroke = [];        // stroke currently being drawn
+let wasPencilGrip = false;
+
 // ── Mirror state ──────────────────────────────────────────────────────────────
 let lastMirrorText = null;
 
@@ -146,13 +151,13 @@ function draw() {
     }
   }
 
-  // ── Hand cursor, hover, strike ────────────────────────────────────────────
+  // ── Hand cursor, hover, strike (gated behind two-finger gesture) ─────────
   if (hands && hands.length > 0) {
     const hand = hands[0];
     const kp8  = hand.keypoints[8];    // index fingertip
     const kp12 = hand.keypoints[12];   // middle fingertip
 
-    if (kp8 && kp12) {
+    if (kp8 && kp12 && isTwoFingerGesture(hand)) {
       // Scale to viewport — handles both normalised (0–1) and pixel coords
       const rawX   = (kp8.x + kp12.x) / 2;
       const rawY   = (kp8.y + kp12.y) / 2;
@@ -160,7 +165,7 @@ function draw() {
       const cx = isNorm ? rawX * windowWidth  : rawX * windowWidth  / (video.elt.videoWidth  || 640);
       const cy = isNorm ? rawY * windowHeight : rawY * windowHeight / (video.elt.videoHeight || 480);
 
-      // 18px red cursor dot
+      // Red cursor dot
       noStroke();
       fill(220, 50, 50);
       circle(cx, cy, 18);
@@ -180,7 +185,6 @@ function draw() {
         const dx = cx - prevCursorX;
         const dy = cy - prevCursorY;
         if (Math.abs(dx) > 10 && Math.abs(dy) < 50) {
-          // Interpolate 16 steps so fast swipes catch every word swept over
           for (let i = 0; i <= 16; i++) {
             const t = i / 16;
             const w = getWordAtPoint(prevCursorX + dx * t, prevCursorY + dy * t);
@@ -191,14 +195,126 @@ function draw() {
 
       prevCursorX = cx;
       prevCursorY = cy;
+    } else {
+      // Gesture not active — reset tracking, don't draw cursor
+      prevCursorX = null;
+      prevCursorY = null;
     }
   } else {
     prevCursorX = null;
     prevCursorY = null;
   }
 
-  // Redraw all persisted strike lines on top
+  // Ink sits beneath strike lines; both redraw from stored data each frame
+  drawInkStrokes();
   drawStrikes();
+
+  // ── Pencil grip drawing ───────────────────────────────────────────────────
+  if (hands && hands.length > 0) {
+    const hand = hands[0];
+    if (isPencilGrip(hand)) {
+      const kp     = hand.keypoints;
+      const isNorm = kp[8].x <= 1.0 && kp[8].y <= 1.0;
+      const vw     = video.elt.videoWidth  || 640;
+      const vh     = video.elt.videoHeight || 480;
+      const toVP   = p => isNorm
+        ? { x: p.x * windowWidth,      y: p.y * windowHeight }
+        : { x: p.x * windowWidth / vw, y: p.y * windowHeight / vh };
+
+      const p8  = toVP(kp[8]);
+      const p12 = toVP(kp[12]);
+      const cx  = (p8.x + p12.x) / 2;
+      const cy  = (p8.y + p12.y) / 2;
+
+      currentStroke.push({ x: cx, y: cy });
+
+      noStroke();
+      fill(20, 20, 20);
+      circle(cx, cy, 10);
+
+      wasPencilGrip = true;
+    } else if (wasPencilGrip) {
+      if (currentStroke.length > 1) inkStrokes.push([...currentStroke]);
+      currentStroke = [];
+      wasPencilGrip = false;
+    }
+  } else if (wasPencilGrip) {
+    if (currentStroke.length > 1) inkStrokes.push([...currentStroke]);
+    currentStroke = [];
+    wasPencilGrip = false;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Gesture detection
+// ─────────────────────────────────────────────────────────────────────────────
+
+function isTwoFingerGesture(hand) {
+  const kp = hand.keypoints;
+  if (!kp || kp.length < 21) return false;
+
+  // Detect coordinate space: ml5 v1 may return 0-1 or video-pixel values
+  const isNorm = kp[8].x <= 1.0 && kp[8].y <= 1.0;
+  const thresh = isNorm ? 0.05 : 15;
+
+  const isExtended = (tip, base) => (kp[base].y - kp[tip].y) >  thresh;
+  const isClosed   = (tip, base) => (kp[base].y - kp[tip].y) <= thresh;
+
+  return (
+    isExtended(8,  5)  &&   // index extended
+    isExtended(12, 9)  &&   // middle extended
+    isClosed(4,  1)    &&   // thumb closed
+    isClosed(16, 13)   &&   // ring closed
+    isClosed(20, 17)        // pinky closed
+  );
+}
+
+function isPencilGrip(hand) {
+  const kp = hand.keypoints;
+  if (!kp || kp.length < 21) return false;
+
+  const isNorm = kp[8].x <= 1.0 && kp[8].y <= 1.0;
+  const vw     = video ? (video.elt.videoWidth  || 640) : 640;
+  const vh     = video ? (video.elt.videoHeight || 480) : 480;
+  const toVP   = p => isNorm
+    ? { x: p.x * windowWidth,      y: p.y * windowHeight }
+    : { x: p.x * windowWidth / vw, y: p.y * windowHeight / vh };
+
+  const p4  = toVP(kp[4]);
+  const p8  = toVP(kp[8]);
+  const p12 = toVP(kp[12]);
+
+  return dist(p4.x, p4.y, p8.x,  p8.y)  < 40 &&
+         dist(p4.x, p4.y, p12.x, p12.y) < 40;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Ink rendering — redrawn from stored arrays every frame
+// ─────────────────────────────────────────────────────────────────────────────
+
+function drawInkStrokes() {
+  for (const pts of inkStrokes)  drawCurveStroke(pts);
+  if (currentStroke.length > 0) drawCurveStroke(currentStroke);
+}
+
+function drawCurveStroke(pts) {
+  if (pts.length < 2) return;
+
+  stroke(20, 20, 20);
+  strokeWeight(2.5);
+  noFill();
+
+  if (pts.length === 2) {
+    line(pts[0].x, pts[0].y, pts[1].x, pts[1].y);
+    return;
+  }
+
+  // Catmull-Rom via p5 curveVertex — duplicate endpoints so curve reaches them
+  beginShape();
+  curveVertex(pts[0].x, pts[0].y);
+  for (const p of pts) curveVertex(p.x, p.y);
+  curveVertex(pts[pts.length - 1].x, pts[pts.length - 1].y);
+  endShape();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
