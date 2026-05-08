@@ -8,6 +8,8 @@ const TILT_THRESHOLD  = 0.35;   // radians (~20°)
 const NOD_THRESHOLD   = 0.20;
 const CURSOR_COOLDOWN = 450;    // ms
 const BASELINE_ALPHA  = 0.995;
+const PEN_GRACE       = 5;      // frames fist can drop before stroke closes
+const STRIKE_GRACE    = 5;      // frames strike gesture can drop before prevCursor resets
 
 // ── Models & media ────────────────────────────────────────────────────────────
 let faceMesh, handPose;
@@ -28,6 +30,8 @@ let struckWords = new Set();   // word-span indices that have been struck
 let inkStrokes    = [];        // completed strokes, each is an array of {x, y}
 let currentStroke = [];        // stroke currently being drawn
 let wasPencilGrip = false;
+let penGraceFrm   = 0;         // consecutive frames since fist was last seen
+let strikeGraceFrm = 0;        // consecutive frames since strike gesture was last seen
 
 // ── Mirror state ──────────────────────────────────────────────────────────────
 let lastMirrorText = null;
@@ -167,15 +171,19 @@ function draw() {
       const cx = isNorm ? rawX * windowWidth  : rawX * windowWidth  / vw;
       const cy = isNorm ? rawY * windowHeight : rawY * windowHeight / vh;
 
-      const onPad = isOverNotepad(cx, cy);
+      const onPad     = isOverNotepad(cx, cy);
+      const seeStrike = isTwoFingerGesture(hand) && onPad;
+      const seePencil = isPencilGrip(hand) && !onPad;
 
-      if (isTwoFingerGesture(hand) && onPad) {
-        // ── Strikethrough: inside notepad only ────────────────────────
-        // Close any open pen stroke before switching
+      if (seeStrike) {
+        // ── Strikethrough: inside notepad ────────────────────────────
+        strikeGraceFrm = 0;
+        // Close any open pen stroke on tool switch
         if (wasPencilGrip) {
           if (currentStroke.length > 1) inkStrokes.push([...currentStroke]);
           currentStroke = [];
           wasPencilGrip = false;
+          penGraceFrm = 0;
         }
 
         noStroke();
@@ -206,46 +214,66 @@ function draw() {
         prevCursorX = cx;
         prevCursorY = cy;
 
-      } else if (isPencilGrip(hand) && !onPad) {
-        // ── Pen drawing: outside notepad only ────────────────────────
-        // Close any open strikethrough tracking before switching
+      } else if (seePencil) {
+        // ── Pen drawing: outside notepad ─────────────────────────────
+        penGraceFrm = 0;
         prevCursorX = null;
         prevCursorY = null;
 
         currentStroke.push({ x: cx, y: cy });
-
         noStroke();
         fill(20, 20, 20);
         circle(cx, cy, 10);
-
         wasPencilGrip = true;
 
       } else {
-        // Wrong zone or no matching gesture — reset both tools cleanly
-        prevCursorX = null;
-        prevCursorY = null;
+        // No active gesture — run grace-period counters so brief dropouts
+        // don't chop strokes or reset swipe tracking mid-action
+
+        // Strike grace: keep prevCursorX/Y alive so a flicker during a swipe
+        // doesn't zero-out the delta and miss the word hit
+        if (prevCursorX !== null) {
+          strikeGraceFrm++;
+          if (strikeGraceFrm >= STRIKE_GRACE) {
+            prevCursorX    = null;
+            prevCursorY    = null;
+            strikeGraceFrm = 0;
+          }
+        }
+
+        // Pen grace: keep currentStroke open so a brief fist dropout
+        // doesn't split a continuous drawing into two disconnected segments
         if (wasPencilGrip) {
-          if (currentStroke.length > 1) inkStrokes.push([...currentStroke]);
-          currentStroke = [];
-          wasPencilGrip = false;
+          penGraceFrm++;
+          if (penGraceFrm >= PEN_GRACE) {
+            if (currentStroke.length > 1) inkStrokes.push([...currentStroke]);
+            currentStroke = [];
+            wasPencilGrip = false;
+            penGraceFrm   = 0;
+          }
         }
       }
+
     } else {
+      // Keypoints unavailable — hard reset, no grace
       prevCursorX = null;
       prevCursorY = null;
       if (wasPencilGrip) {
         if (currentStroke.length > 1) inkStrokes.push([...currentStroke]);
         currentStroke = [];
         wasPencilGrip = false;
+        penGraceFrm   = 0;
       }
     }
   } else {
+    // No hand detected — hard reset, no grace
     prevCursorX = null;
     prevCursorY = null;
     if (wasPencilGrip) {
       if (currentStroke.length > 1) inkStrokes.push([...currentStroke]);
       currentStroke = [];
       wasPencilGrip = false;
+      penGraceFrm   = 0;
     }
   }
 
