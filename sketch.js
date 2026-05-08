@@ -151,103 +151,117 @@ function draw() {
     }
   }
 
-  // ── Hand cursor, hover, strike (gated behind two-finger gesture) ─────────
+  // ── Hand gesture routing — zone-based ────────────────────────────────────
   if (hands && hands.length > 0) {
     const hand = hands[0];
-    const kp8  = hand.keypoints[8];    // index fingertip
-    const kp12 = hand.keypoints[12];   // middle fingertip
+    const kp8  = hand.keypoints[8];
+    const kp12 = hand.keypoints[12];
 
-    if (kp8 && kp12 && isTwoFingerGesture(hand)) {
-      // Scale to viewport — handles both normalised (0–1) and pixel coords
+    if (kp8 && kp12) {
+      // Shared cursor position (midpoint of index + middle tips)
       const rawX   = (kp8.x + kp12.x) / 2;
       const rawY   = (kp8.y + kp12.y) / 2;
       const isNorm = rawX <= 1.0 && rawY <= 1.0;
-      const cx = isNorm ? rawX * windowWidth  : rawX * windowWidth  / (video.elt.videoWidth  || 640);
-      const cy = isNorm ? rawY * windowHeight : rawY * windowHeight / (video.elt.videoHeight || 480);
+      const vw     = video.elt.videoWidth  || 640;
+      const vh     = video.elt.videoHeight || 480;
+      const cx = isNorm ? rawX * windowWidth  : rawX * windowWidth  / vw;
+      const cy = isNorm ? rawY * windowHeight : rawY * windowHeight / vh;
 
-      // Red cursor dot
-      noStroke();
-      fill(220, 50, 50);
-      circle(cx, cy, 18);
+      const onPad = isOverNotepad(cx, cy);
 
-      // Hover: rounded red outline around word under cursor
-      const hovered = getWordAtPoint(cx, cy);
-      if (hovered) {
-        noFill();
-        stroke(220, 50, 50);
-        strokeWeight(2);
-        const r = hovered.rect;
-        rect(r.left - 2, r.top - 2, r.width + 4, r.height + 4, 4);
-      }
+      if (isTwoFingerGesture(hand) && onPad) {
+        // ── Strikethrough: inside notepad only ────────────────────────
+        // Close any open pen stroke before switching
+        if (wasPencilGrip) {
+          if (currentStroke.length > 1) inkStrokes.push([...currentStroke]);
+          currentStroke = [];
+          wasPencilGrip = false;
+        }
 
-      // Strike: horizontal swipe (large dx, small dy)
-      if (prevCursorX !== null) {
-        const dx = cx - prevCursorX;
-        const dy = cy - prevCursorY;
-        if (Math.abs(dx) > 10 && Math.abs(dy) < 50) {
-          for (let i = 0; i <= 16; i++) {
-            const t = i / 16;
-            const w = getWordAtPoint(prevCursorX + dx * t, prevCursorY + dy * t);
-            if (w) struckWords.add(w.index);
+        noStroke();
+        fill(210, 40, 40);
+        circle(cx, cy, 18);
+
+        const hovered = getWordAtPoint(cx, cy);
+        if (hovered) {
+          noFill();
+          stroke(210, 40, 40);
+          strokeWeight(2);
+          const r = hovered.rect;
+          rect(r.left - 2, r.top - 2, r.width + 4, r.height + 4, 4);
+        }
+
+        if (prevCursorX !== null) {
+          const dx = cx - prevCursorX;
+          const dy = cy - prevCursorY;
+          if (Math.abs(dx) > 10 && Math.abs(dy) < 50) {
+            for (let i = 0; i <= 16; i++) {
+              const t = i / 16;
+              const w = getWordAtPoint(prevCursorX + dx * t, prevCursorY + dy * t);
+              if (w) struckWords.add(w.index);
+            }
           }
         }
-      }
 
-      prevCursorX = cx;
-      prevCursorY = cy;
+        prevCursorX = cx;
+        prevCursorY = cy;
+
+      } else if (isPencilGrip(hand) && !onPad) {
+        // ── Pen drawing: outside notepad only ────────────────────────
+        // Close any open strikethrough tracking before switching
+        prevCursorX = null;
+        prevCursorY = null;
+
+        currentStroke.push({ x: cx, y: cy });
+
+        noStroke();
+        fill(20, 20, 20);
+        circle(cx, cy, 10);
+
+        wasPencilGrip = true;
+
+      } else {
+        // Wrong zone or no matching gesture — reset both tools cleanly
+        prevCursorX = null;
+        prevCursorY = null;
+        if (wasPencilGrip) {
+          if (currentStroke.length > 1) inkStrokes.push([...currentStroke]);
+          currentStroke = [];
+          wasPencilGrip = false;
+        }
+      }
     } else {
-      // Gesture not active — reset tracking, don't draw cursor
       prevCursorX = null;
       prevCursorY = null;
+      if (wasPencilGrip) {
+        if (currentStroke.length > 1) inkStrokes.push([...currentStroke]);
+        currentStroke = [];
+        wasPencilGrip = false;
+      }
     }
   } else {
     prevCursorX = null;
     prevCursorY = null;
-  }
-
-  // Ink sits beneath strike lines; both redraw from stored data each frame
-  drawInkStrokes();
-  drawStrikes();
-
-  // ── Pencil grip drawing ───────────────────────────────────────────────────
-  if (hands && hands.length > 0) {
-    const hand = hands[0];
-    if (isPencilGrip(hand)) {
-      const kp     = hand.keypoints;
-      const isNorm = kp[8].x <= 1.0 && kp[8].y <= 1.0;
-      const vw     = video.elt.videoWidth  || 640;
-      const vh     = video.elt.videoHeight || 480;
-      const toVP   = p => isNorm
-        ? { x: p.x * windowWidth,      y: p.y * windowHeight }
-        : { x: p.x * windowWidth / vw, y: p.y * windowHeight / vh };
-
-      const p8  = toVP(kp[8]);
-      const p12 = toVP(kp[12]);
-      const cx  = (p8.x + p12.x) / 2;
-      const cy  = (p8.y + p12.y) / 2;
-
-      currentStroke.push({ x: cx, y: cy });
-
-      noStroke();
-      fill(20, 20, 20);
-      circle(cx, cy, 10);
-
-      wasPencilGrip = true;
-    } else if (wasPencilGrip) {
+    if (wasPencilGrip) {
       if (currentStroke.length > 1) inkStrokes.push([...currentStroke]);
       currentStroke = [];
       wasPencilGrip = false;
     }
-  } else if (wasPencilGrip) {
-    if (currentStroke.length > 1) inkStrokes.push([...currentStroke]);
-    currentStroke = [];
-    wasPencilGrip = false;
   }
+
+  // Ink beneath strike lines; both redrawn from stored data each frame
+  drawInkStrokes();
+  drawStrikes();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Gesture detection
+//  Zone + gesture helpers
 // ─────────────────────────────────────────────────────────────────────────────
+
+function isOverNotepad(x, y) {
+  const r = document.getElementById('notebook').getBoundingClientRect();
+  return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+}
 
 function isTwoFingerGesture(hand) {
   const kp = hand.keypoints;
@@ -412,7 +426,7 @@ function syncMirror() {
 function drawStrikes() {
   if (struckWords.size === 0) return;
 
-  stroke(220, 50, 50);
+  stroke(210, 40, 40);
   strokeWeight(2);
   noFill();
 
